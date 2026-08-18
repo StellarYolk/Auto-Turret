@@ -85,5 +85,11 @@ In that case, follow these steps
 
 
 
-
-
+- Installing the pre-trained weight for GroundingDINO
+```
+mkdir weights
+cd weights
+wget https://github.com/IDEA-Research/GroundingDINO/releases/download/v0.1.0-alpha/groundingdino_swint_ogc.pth
+cd ..
+```
+**NOTE** : This uses a lot of computational power so make sure you have atleast 8 GB of VRAM

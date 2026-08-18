@@ -25,3 +25,12 @@
     </ol>
     </li>
 </ul>
+
+---
+
+## Installation guide
+
+- First clone the repo
+```
+git clone 
+```

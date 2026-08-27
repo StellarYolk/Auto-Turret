@@ -3,6 +3,13 @@ import torch
 from GroundingDINO.groundingdino.util.inference import load_model, load_image, predict, annotate
 import GroundingDINO.groundingdino.datasets.transforms as T
 from PIL import Image
+import matplotlib.colors as mcolors
+import colorsys
+import numpy as np
+
+# disable this after 1st run
+import os
+os.environ["HF_HUB_OFFLINE"] = "1"
 
 # to reduce warnings
 import warnings
@@ -17,15 +24,15 @@ model = load_model(
     "weights/groundingdino_swint_ogc.pth"
     )
 
-TEXT_PROMPT = "water bottle"
-BOX_THRESHOLD = 0.35
-TEXT_THRESHOLD = 0.25
+BOX_THRESHOLD = 0.45
+TEXT_THRESHOLD = 0.35
 
 transform = T.Compose([
     T.RandomResize([800], max_size=1333),
     T.ToTensor(),
     T.Normalize([0.485, 0.456, 0.406], [0.229, 0.224, 0.225])
 ])
+
 def load_image_from_array(frame_bgr):
     img_source = cv2.cvtColor(frame_bgr, cv2.COLOR_BGR2RGB)
     image_pil = Image.fromarray(img_source)
@@ -64,14 +71,70 @@ def auto_or_manual():
         exit()
     return 0 if selection_type == '0' else 1
 
+
+COLOUR_LOOKUP = {}
+for name, hexcode in mcolors.XKCD_COLORS.items():
+    clean_name = name.replace("xkcd:", "")
+    COLOUR_LOOKUP[clean_name] = mcolors.hex2color(hexcode)
+
+def extract_colour_word(target_des, colour_lookup=COLOUR_LOOKUP):
+    prompt_lower = target_des.lower()
+    matches = [name for name in colour_lookup if name in prompt_lower]
+    if not matches: return None, target_des
+
+    target_colour = max(matches, key=len)
+    target_des = prompt_lower.replace(target_colour, "").strip()
+    print(f"colour detected: {target_colour}\ttarget des: {target_des}")
+    return target_colour, target_des
+
+def rgb_to_hsv_range(rgb_float, tolerance_h=20, tolerance_s=60, tolerance_v=60):
+    r, g, b = rgb_float
+    h, s, v = colorsys.rgb_to_hsv(r, g, b)
+    h_cv, s_cv, v_cv = int(h * 179), int(s * 255), int(v * 255)
+
+    is_grayscale = s_cv < 30
+
+    if is_grayscale:
+        lower = np.array([0, 0, max(v_cv - 50, 0)])
+        upper = np.array([179, 60, min(v_cv + 50, 255)])
+
+    else:
+        lower = np.array([max(h_cv - tolerance_h, 0), 40, 40])
+        upper = np.array([min(h_cv + tolerance_h, 179), 255, 255])
+
+    return lower, upper
+
+def check_colour_match(frame, hsv_range, box_coords, is_red=False):
+    x1, y1, x2, y2 = box_coords
+    crop = frame[y1:y2, x1:x2]
+
+    hsv = cv2.cvtColor(crop, cv2.COLOR_BGR2HSV)
+    # mask = cv2.inRange(hsv, hsv_range[0], hsv_range[1])
+
+    if is_red:
+        lower1 = np.array([0, hsv_range[0][1], hsv_range[0][2]])
+        upper1 = np.array([10, hsv_range[1][1], hsv_range[1][2]])
+        lower2 = np.array([170, hsv_range[0][1], hsv_range[0][2]])
+        upper2 = np.array([179, hsv_range[1][1], hsv_range[1][2]])
+        mask = cv2.inRange(hsv, lower1, upper1) | cv2.inRange(hsv, lower2, upper2)
+    else:
+        mask = cv2.inRange(hsv, hsv_range[0], hsv_range[1])
+
+    match_ratio = np.count_nonzero(mask) / mask.size
+    return match_ratio if match_ratio > 0.15 else None
+
+
 cap = cv2.VideoCapture(1)
 img_h, img_w = None, None
 target_object = input("enter the description of the target: ").strip().lower()
+
+colour_name, target_object = extract_colour_word(target_object)
+
 frame_count = 0
 # target_parameters = [None, None, None]     # boxes, logits, phrases 
 trackers = [] #for csrt tracker objects
-
 target = None
+
 while True:
     ret, frame = cap.read()
     if not ret: break
@@ -80,9 +143,11 @@ while True:
     # selection_type = auto_or_manual()
     
     if frame_count == 0 : 
-        # target_parameters = detect(frame, target_object) 
-        # target = show_targets(target_parameters[0], target_parameters[1], target_parameters[2], target_object)
-
+        if colour_name:
+            rgb = COLOUR_LOOKUP[colour_name]
+            hsv_lower, hsv_upper = rgb_to_hsv_range(rgb)
+            print(rgb, hsv_upper, hsv_lower)
+        
         boxes, logits, phrases = detect(frame, target_object)
         candidates = show_targets(boxes, logits, phrases, target_object)
         trackers = []
@@ -92,6 +157,12 @@ while True:
             w, h = x2 - x1, y2 - y1
             if w <= 0 or h <= 0: continue
 
+            if colour_name:
+                colour_match_result = check_colour_match(frame, (hsv_lower, hsv_upper), (x1, y1, x2, y2))
+                print(colour_match_result)
+                if colour_match_result == None: 
+                    continue
+            
             tracker = cv2.legacy.TrackerCSRT_create()
             tracker.init(frame, (x1, y1, w, h))
             trackers.append(tracker) 
@@ -112,14 +183,6 @@ while True:
         trackers = active_tracking
 
     frame_count = (frame_count + 1) % 10     # detect every 10th frame
-
-    # if target:
-    #     for box, score in target:
-    #         x1, y1, x2, y2 = box_to_pixels(box, img_w, img_h)
-    #         cv2.rectangle(frame, (x1, y1), (x2, y2), (0, 255, 0), 3)
-    #         label = f"{target_object} {score:.2f}"
-    #         cv2.putText(frame, target_object, (x1, max(y1 -10, 0)), cv2.FONT_HERSHEY_SIMPLEX, 0.6, (0, 255, 0), 2)
-            
 
     cv2.imshow("frame", frame)
     if cv2.waitKey(1) & 0xFF == ord('q'):

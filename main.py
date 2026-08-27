@@ -4,6 +4,14 @@ from GroundingDINO.groundingdino.util.inference import load_model, load_image, p
 import GroundingDINO.groundingdino.datasets.transforms as T
 from PIL import Image
 
+# to reduce warnings
+import warnings
+warnings.filterwarnings("ignore", category=FutureWarning)
+warnings.filterwarnings("ignore", category=UserWarning)
+warnings.filterwarnings("ignore", module="transformers")
+warnings.filterwarnings("ignore", module="torch")
+warnings.filterwarnings("ignore", module="timm")
+
 model = load_model(
     "GroundingDINO/groundingdino/config/GroundingDINO_SwinT_OGC.py",
     "weights/groundingdino_swint_ogc.pth"
@@ -59,7 +67,11 @@ def auto_or_manual():
 cap = cv2.VideoCapture(1)
 img_h, img_w = None, None
 target_object = input("enter the description of the target: ").strip().lower()
+frame_count = 0
+# target_parameters = [None, None, None]     # boxes, logits, phrases 
+trackers = [] #for csrt tracker objects
 
+target = None
 while True:
     ret, frame = cap.read()
     if not ret: break
@@ -67,15 +79,47 @@ while True:
     img_h, img_w = frame.shape[:2]
     # selection_type = auto_or_manual()
     
-    boxes, logits, phrases = detect(frame, target_object)
-    target = show_targets(boxes, logits, phrases, target_object)
+    if frame_count == 0 : 
+        # target_parameters = detect(frame, target_object) 
+        # target = show_targets(target_parameters[0], target_parameters[1], target_parameters[2], target_object)
 
-    if target:
-        for box, score in target:
+        boxes, logits, phrases = detect(frame, target_object)
+        candidates = show_targets(boxes, logits, phrases, target_object)
+        trackers = []
+        for box, score in candidates:
             x1, y1, x2, y2 = box_to_pixels(box, img_w, img_h)
-            cv2.rectangle(frame, (x1, y1), (x2, y2), (0, 255, 0), 3)
-            label = f"{target_object} {score:.2f}"
-            cv2.putText(frame, target_object, (x1, max(y1 -10, 0)), cv2.FONT_HERSHEY_SIMPLEX, 0.6, (0, 255, 0), 2)
+            x1, y1 = max(x1, 0), max(y1, 0)
+            w, h = x2 - x1, y2 - y1
+            if w <= 0 or h <= 0: continue
+
+            tracker = cv2.legacy.TrackerCSRT_create()
+            tracker.init(frame, (x1, y1, w, h))
+            trackers.append(tracker) 
+
+            cv2.rectangle(frame, (x1, y1), (x2, y2), (0, 255, 0), 2)
+            cv2.putText(frame, target_object, (x1, max(y1-10, 0)), cv2.FONT_HERSHEY_SIMPLEX, 0.6, (0, 255, 0), 2)
+
+    else:
+        active_tracking = []
+        for tracker in trackers:
+            success, bbox = tracker.update(frame)
+            if success:
+                x, y, w, h = [int(v) for v in bbox]
+                cv2.rectangle(frame, (x, y), (x+w, y+h), (0, 255, 0), 2)
+                cv2.putText(frame, target_object, (x, max(y-10, 0)), cv2.FONT_HERSHEY_SIMPLEX, 0.6, (0, 255, 0), 2)
+                active_tracking.append(tracker)
+
+        trackers = active_tracking
+
+    frame_count = (frame_count + 1) % 10     # detect every 10th frame
+
+    # if target:
+    #     for box, score in target:
+    #         x1, y1, x2, y2 = box_to_pixels(box, img_w, img_h)
+    #         cv2.rectangle(frame, (x1, y1), (x2, y2), (0, 255, 0), 3)
+    #         label = f"{target_object} {score:.2f}"
+    #         cv2.putText(frame, target_object, (x1, max(y1 -10, 0)), cv2.FONT_HERSHEY_SIMPLEX, 0.6, (0, 255, 0), 2)
+            
 
     cv2.imshow("frame", frame)
     if cv2.waitKey(1) & 0xFF == ord('q'):

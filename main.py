@@ -6,10 +6,13 @@ from PIL import Image
 import matplotlib.colors as mcolors
 import colorsys
 import numpy as np
+from turret_class import TurretController
+import json
+from pathlib import Path
 
-# disable this after 1st run
-import os
-os.environ["HF_HUB_OFFLINE"] = "1"
+# uncomment this after 1st run
+# import os
+# os.environ["HF_HUB_OFFLINE"] = "1"
 
 # to reduce warnings
 import warnings
@@ -72,6 +75,7 @@ def auto_or_manual():
     return 0 if selection_type == '0' else 1
 
 
+# ******************* COLOUR FINDER AND MANAGER ****************
 COLOUR_LOOKUP = {}
 for name, hexcode in mcolors.XKCD_COLORS.items():
     clean_name = name.replace("xkcd:", "")
@@ -122,6 +126,24 @@ def check_colour_match(frame, hsv_range, box_coords, is_red=False):
 
     match_ratio = np.count_nonzero(mask) / mask.size
     return match_ratio if match_ratio > 0.15 else None
+
+
+# ***************** SERIAL COORDINATE MANAGER **********************
+turret = TurretController()
+
+file_path = Path("calibration.json")
+if file_path.is_file():
+    with open(file_path, "r", encoding='utf-8') as file:
+        data = json.load(file)
+        pan_coeffs = data["pan_coeffs"]
+        tilt_coeffs = data["tilt_coeffs"]
+else:
+    print("File Not Found!\nPlease calibrate the system!\n")
+
+def pixel_to_servo_angle(px, py, pan_coeffs, tilt_coeffs):
+    pan = pan_coeffs[0]*px + pan_coeffs[1]*py + pan_coeffs[2]
+    tilt = tilt_coeffs[0]*px + tilt_coeffs[1]*py + tilt_coeffs[2]
+    return pan, tilt
 
 
 cap = cv2.VideoCapture(1)

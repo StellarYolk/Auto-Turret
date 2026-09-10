@@ -9,10 +9,14 @@ import numpy as np
 from turret_class import TurretController
 import json
 from pathlib import Path
+import time
+
+import pybullet as p
+import pybullet_data
 
 # uncomment this after 1st run
-# import os
-# os.environ["HF_HUB_OFFLINE"] = "1"
+import os
+os.environ["HF_HUB_OFFLINE"] = "1"
 
 # to reduce warnings
 import warnings
@@ -29,6 +33,9 @@ model = load_model(
 
 BOX_THRESHOLD = 0.45
 TEXT_THRESHOLD = 0.35
+
+MANUAL_TESTING = True
+
 
 transform = T.Compose([
     T.RandomResize([800], max_size=1333),
@@ -129,21 +136,22 @@ def check_colour_match(frame, hsv_range, box_coords, is_red=False):
 
 
 # ***************** SERIAL COORDINATE MANAGER **********************
-turret = TurretController()
+if not MANUAL_TESTING:
+    turret = TurretController()
 
-file_path = Path("calibration.json")
-if file_path.is_file():
-    with open(file_path, "r", encoding='utf-8') as file:
-        data = json.load(file)
-        pan_coeffs = data["pan_coeffs"]
-        tilt_coeffs = data["tilt_coeffs"]
-else:
-    print("File Not Found!\nPlease calibrate the system!\n")
+    file_path = Path("calibration.json")
+    if file_path.is_file():
+        with open(file_path, "r", encoding='utf-8') as file:
+            data = json.load(file)
+            pan_coeffs = data["pan_coeffs"]
+            tilt_coeffs = data["tilt_coeffs"]
+    else:
+        print("File Not Found!\nPlease calibrate the system!\n")
 
-def pixel_to_servo_angle(px, py, pan_coeffs, tilt_coeffs):
-    pan = pan_coeffs[0]*px + pan_coeffs[1]*py + pan_coeffs[2]
-    tilt = tilt_coeffs[0]*px + tilt_coeffs[1]*py + tilt_coeffs[2]
-    return pan, tilt
+    def pixel_to_servo_angle(px, py, pan_coeffs, tilt_coeffs):
+        pan = pan_coeffs[0]*px + pan_coeffs[1]*py + pan_coeffs[2]
+        tilt = tilt_coeffs[0]*px + tilt_coeffs[1]*py + tilt_coeffs[2]
+        return pan, tilt
 
 
 cap = cv2.VideoCapture(1)
@@ -154,7 +162,7 @@ colour_name, target_object = extract_colour_word(target_object)
 
 frame_count = 0
 # target_parameters = [None, None, None]     # boxes, logits, phrases 
-trackers = [] #for csrt tracker objects
+trackers = []           #for csrt tracker objects
 target = None
 
 while True:

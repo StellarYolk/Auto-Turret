@@ -1,0 +1,78 @@
+<?xml version="1.0"?>
+<robot name="pan_tilt_turret">
+
+  <link name="base_link">
+    <visual>
+      <geometry><box size="0.1 0.1 0.05"/></geometry>
+      <material name="gray"><color rgba="0.5 0.5 0.5 1"/></material>
+    </visual>
+    <collision>
+      <geometry><box size="0.1 0.1 0.05"/></geometry>
+    </collision>
+    <inertial>
+      <mass value="1.0"/>
+      <inertia ixx="0.01" ixy="0" ixz="0" iyy="0.01" iyz="0" izz="0.01"/>
+    </inertial>
+  </link>
+
+  <!-- PAN LINK (rotates around vertical Z axis) -->
+  <link name="pan_link">
+    <visual>
+      <geometry><cylinder radius="0.03" length="0.08"/></geometry>
+      <material name="dark_gray"><color rgba="0.3 0.3 0.3 1"/></material>
+    </visual>
+    <collision>
+      <geometry><cylinder radius="0.03" length="0.08"/></geometry>
+    </collision>
+    <inertial>
+      <mass value="0.2"/>
+      <inertia ixx="0.001" ixy="0" ixz="0" iyy="0.001" iyz="0" izz="0.001"/>
+    </inertial>
+  </link>
+
+  <joint name="pan_joint" type="revolute">
+    <parent link="base_link"/>
+    <child link="pan_link"/>
+    <origin xyz="0 0 0.05" rpy="0 0 0"/>
+    <axis xyz="0 0 1"/>
+    <limit lower="-1.57" upper="1.57" effort="10" velocity="3"/>
+  </joint>
+
+  <!-- TILT LINK (rotates around horizontal Y axis) -->
+  <link name="tilt_link">
+    <visual>
+      <geometry><box size="0.02 0.08 0.02"/></geometry>
+      <material name="red"><color rgba="0.8 0.1 0.1 1"/></material>
+    </visual>
+    <collision>
+      <geometry><box size="0.02 0.08 0.02"/></geometry>
+    </collision>
+    <inertial>
+      <mass value="0.1"/>
+      <inertia ixx="0.0005" ixy="0" ixz="0" iyy="0.0005" iyz="0" izz="0.0005"/>
+    </inertial>
+  </link>
+
+  <joint name="tilt_joint" type="revolute">
+    <parent link="pan_link"/>
+    <child link="tilt_link"/>
+    <origin xyz="0 0 0.06" rpy="0 0 0"/>
+    <axis xyz="0 1 0"/>
+    <limit lower="-0.78" upper="0.78" effort="10" velocity="3"/>
+  </joint>
+
+  <!-- CAMERA LINK (fixed to tilt_link, this is where we render from) -->
+  <link name="camera_link">
+    <visual>
+      <geometry><box size="0.02 0.02 0.02"/></geometry>
+      <material name="blue"><color rgba="0.1 0.1 0.8 1"/></material>
+    </visual>
+  </link>
+
+  <joint name="camera_joint" type="fixed">
+    <parent link="tilt_link"/>
+    <child link="camera_link"/>
+    <origin xyz="0.03 0 0" rpy="0 0 0"/>
+  </joint>
+
+</robot>

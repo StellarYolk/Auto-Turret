@@ -2,3 +2,4 @@ venv/
 GroundingDINO/
 weights/
 __pycache__/
+.python-version

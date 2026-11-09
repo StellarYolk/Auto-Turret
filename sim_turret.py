@@ -86,6 +86,17 @@ LOCK_THRESHOLD_PX = 12       # how close to center counts as "reached"
 LOCK_HOLD_FRAMES = 5         # must stay locked this many consecutive frames before respawn
 lock_counter = 0
 
+W, H = 960, 540
+sim_writer = cv2.VideoWriter("pybullet_sim.mp4", cv2.VideoWriter_fourcc(*'mp4v'), 30, (W, H))
+
+def grab_gui_view():
+    cam = p.getDebugVisualizerCamera()
+    view_matrix, proj_matrix = cam[2], cam[3]
+    img = p.getCameraImage(W, H, view_matrix, proj_matrix,
+                           renderer=p.ER_BULLET_HARDWARE_OPENGL)
+    rgb = np.reshape(img[2], (H, W, 4))[:, :, :3].astype(np.uint8)
+    return cv2.cvtColor(rgb, cv2.COLOR_RGB2BGR)
+
 while True:
     frame = get_camera_image(turretId, CAMERA_LINK)
     img_h, img_w = frame.shape[:2]
@@ -144,9 +155,11 @@ while True:
 
     cv2.imshow("Turret Camera View", frame)
     p.stepSimulation()
+    sim_writer.write(grab_gui_view())
 
     if cv2.waitKey(1) & 0xFF == ord('q'):
         break
 
+sim_writer.release()
 p.disconnect()
 cv2.destroyAllWindows()
